@@ -1,0 +1,101 @@
+# Yeni docker compose postgresql_16 -----------
+# docker-compose build
+version: '3.9'
+volumes:
+  dbbackups:
+  postgis-data:
+
+services:
+
+  postgresql_16:
+    image: kartoza/postgis:16-3.4
+    shm_size: 9g
+    container_name: postgresql_16
+    volumes:
+      - /data/opt/postgresql_16/data/:/var/lib/postgresql
+      - /data/opt/postgresql_16/backups/:/backups
+      - /data/opt/postgresql_16/extra_settings/extra.conf:/settings/extra.conf
+    environment:
+      # If you need to create multiple database you can add coma separated databases eg gis,data
+      - POSTGRES_DB=postgres,pg_cron
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASS=xxx
+      - ALLOW_IP_RANGE=0.0.0.0/0
+      # Add extensions you need to be enabled by default in the DB. Default are the five specified below
+      - POSTGRES_MULTIPLE_EXTENSIONS=postgis,hstore,postgis_topology,postgis_raster,pgrouting
+      - RUN_AS_ROOT=true
+      #
+      - SHARED_PRELOAD_LIBRARIES=pg_stat_statements,pg_cron
+      # pg_stat_statements settings
+      - PG_STAT_STATEMENTS_MAX=10000
+      - PG_STAT_STATEMENTS_TRACK=all
+      # pg_cron settings
+      - PG_CRON_DATABASE=pg_cron
+      #
+      - POSTGRES_INITDB_ARGS=--data-checksums
+      - MAX_CONNECTIONS=400
+      - SHARED_BUFFERS=8GB         # Total RAM in  %25
+      - EFFECTIVE_CACHE_SIZE=16GB  # Total Ram in  %50 %60
+      - MAINTENANCE_WORK_MEM=1GB
+      - WAL_BUFFERS=64MB
+      - DEFAULT_STATISTICS_TARGET=100
+      - RANDOM_PAGE_COST=1.1
+      - EFFECTIVE_IO_CONCURRENCY=1
+      - WORK_MEM=16MB
+      - BGWRITER_LRU_MAXPAGES=4000
+      - BGWRITER_LRU_MULTIPLIER=3.0
+      - CHECKPOINT_TIMEOUT=10min
+      - CHECKPOINT_COMPLETION_TARGET=0.9
+      - MIN_WAL_SIZE=3GB
+      - MAX_WAL_SIZE=12GB
+      - LOG_LINE_PREFIX=%m [%p] %q%u@%d client=%h app=%a
+      - MAX_WORKER_PROCESSES=12             # çatı değerdir sunucu total cpudan 2-4 daha az verilirse iyi olur
+      - MAX_PARALLEL_WORKERS_PER_GATHER=4   # her paralel sorgunun kullanacağı max cpu değeri
+      - MAX_PARALLEL_WORKERS=10             # max kullanılacak cpu paralel sorgular için
+      - MAX_PARALLEL_MAINTENANCE_WORKERS=2  # bakım için ayrılan cpu
+    ports:
+      - "5432:5432"
+    restart: always
+
+    healthcheck:
+      test: "PGPASSWORD=xxx pg_isready -h 127.0.0.1 -U postgres -d postgres"
+
+
+  postgresql_16_backups:
+    #image: kartoza/pg-backup:16-3.4
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: postgresql_16_BackupAndVacuum
+    hostname: pg-backups
+    volumes:
+      - /data/opt/postgresql_16/backups/:/backups
+      - /data/opt/postgresql_16/crontabs:/var/spool/cron/crontabs
+      - /data/opt/postgresql_16/vacuum/:/vacuum
+    environment:
+      - DUMPPREFIX=PG_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASS=xxx
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=postgresql_16
+    restart: always
+    depends_on:
+      postgresql_16:
+        condition: service_healthy
+    deploy:
+     resources:
+      limits:
+        cpus: "2.0"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin4_container
+    restart: always
+    user: 'root'
+    ports:
+      - "80:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: furkan.eker@basarsoft.com.tr
+      PGADMIN_DEFAULT_PASSWORD: xxx
+    volumes:
+      - /data/opt/postgresql_16/pgadmin:/var/lib/pgadmin
